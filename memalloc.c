@@ -156,14 +156,12 @@ static int device_mmap(struct file *filp, struct vm_area_struct *vma)
 //	vma->vm_page_prot = __pgprot_modify(vma->vm_page_prot,L_PTE_MT_MASK,L_PTE_MT_WRITEBACK);
 //	vma->vm_page_prot = __pgprot_modify(vma->vm_page_prot,L_PTE_MT_MASK,L_PTE_MT_DEV_CACHED);
 //	vma->vm_page_prot = __pgprot_modify(vma->vm_page_prot,L_PTE_MT_MASK,L_PTE_MT_WRITETHROUGH);
-
+//	vma->vm_page_prot = pgprot_dmacoherent(vma->vm_page_prot);
 	if (remap_pfn_range(vma, vma->vm_start,
 			    pa_currentbuf>>PAGE_SHIFT , size, vma->vm_page_prot)) {
 		res = -ENOBUFS;
 		goto device_mmap_exit;
 	}
-
-	vma->vm_flags &= ~VM_IO;	/* using shared anonymous pages */
 
 device_mmap_exit:
 	return res;

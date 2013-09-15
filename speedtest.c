@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 #include "memalloc.h"
 
+#define BUFSIZE  (2*1024*1024)
 
 
 int main()
@@ -23,10 +24,15 @@ int main()
 	unsigned long s=0;
 
         fd = open("/dev/memalloc",O_RDWR,0);
-	if(!fd){
+	if(fd<1){
 		perror("unable to open device file\r\n");
 		goto exito;
 	}
+
+	/*
+	 * Set bufsize
+	 */
+	ioctl(fd,SET_MEM_SIZE,BUFSIZE);
 	
 	/*
 	 *alloc memory with dma_alloc_coherent
@@ -119,6 +125,37 @@ int main()
         gettimeofday(&t2,NULL);
         printf("kmalloc in userspace          %.3fs (s=%lu)\n",
 		((t2.tv_sec-t1.tv_sec)*1000000+(t2.tv_usec-t1.tv_usec))/1000000.0,s);
+
+        /*
+         * test speed of kmalloc buffer
+         */
+	s=0;
+        gettimeofday(&t1,NULL);
+        for(j=0;j<LOOPCNT;j++){
+		ioctl(fd,SYNC_KMEM,0);
+                for(i=0;i<BUFSIZE;i++){
+                        s += va_kmbuf[i];
+        	}
+	}
+        gettimeofday(&t2,NULL);
+        printf("kmalloc in userspace w sync   %.3fs (s=%lu)\n",
+		((t2.tv_sec-t1.tv_sec)*1000000+(t2.tv_usec-t1.tv_usec))/1000000.0,s);
+
+        /*
+         * test speed of kmalloc buffer
+         */
+	s=0;
+        gettimeofday(&t1,NULL);
+        for(j=0;j<LOOPCNT;j++){
+		ioctl(fd,USELESS,0);
+                for(i=0;i<BUFSIZE;i++){
+                        s += va_kmbuf[i];
+        	}
+	}
+        gettimeofday(&t2,NULL);
+        printf("kmalloc in userspace w ioctl   %.3fs (s=%lu)\n",
+		((t2.tv_sec-t1.tv_sec)*1000000+(t2.tv_usec-t1.tv_usec))/1000000.0,s);
+
 
 
 	/*

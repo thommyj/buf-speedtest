@@ -31,7 +31,7 @@ static dma_addr_t pa_dmabuf;
 static char *va_kmbuf = NULL;
 static dma_addr_t pa_kmbuf;
 static dma_addr_t pa_currentbuf;
-
+static unsigned long bufsize = 0;
 
 static struct file_operations fops = {
 	.open = device_open,
@@ -60,7 +60,7 @@ void cleanup_module(void)
 	 */
 	unregister_chrdev(major, DEVICE_NAME);
 	if(va_dmabuf)
-		dma_free_coherent(0,BUFSIZE,va_dmabuf,pa_dmabuf);
+		dma_free_coherent(0,bufsize,va_dmabuf,pa_dmabuf);
         if(va_kmbuf)
 		kfree(va_kmbuf);
 }
@@ -73,48 +73,64 @@ static long device_ioctl(struct file *file,
 	int i,j;
 	unsigned long s=0;
 
-	printk("entering ioctl cmd %d\r\n",cmd);
+	printk("entering ioctl cmd %u with arg %lu\r\n",cmd,arg);
+	if (bufsize == 0 && cmd != SET_MEM_SIZE){
+		printk("memalloc: first set memsize!\r\n");
+		return -EFAULT;
+	}else if (bufsize != 0 && cmd == SET_MEM_SIZE){
+		printk("memalloc: not possible to change mem size\r\n");
+		return -EFAULT;
+	}
+
+ 
 	switch(cmd)
 	{
 	case DMAMEM:
-		va_dmabuf = dma_alloc_coherent(0,BUFSIZE,&pa,GFP_KERNEL|GFP_DMA);
-		//memset(va_dmabuf,0,BUFSIZE);
-		//va_dmabuf[15] = 23;
+		va_dmabuf = dma_alloc_coherent(0,bufsize,&pa,GFP_KERNEL|GFP_DMA);
 		pa_dmabuf = pa;	
 		printk("kernel va_dmabuf: 0x%p, pa_dmabuf 0x%08X\r\n",va_dmabuf,pa_dmabuf);
 		break;
 	case DMAMEM_TEST:
 		for(j=0;j<LOOPCNT;j++){
-			for(i=0;i<BUFSIZE;i++){
+			for(i=0;i<bufsize;i++){
 				s += va_dmabuf[i];
 			}
 		}
 		break;
 	case KMEM:
-		va_kmbuf = kmalloc(BUFSIZE,GFP_KERNEL);
-		//pa = virt_to_phys(va_kmbuf);
-		//pa = __pa(va_kmbuf);
-		pa = dma_map_single(0,va_kmbuf,BUFSIZE,DMA_FROM_DEVICE);
+		va_kmbuf = kmalloc(bufsize,GFP_KERNEL);
+		pa = dma_map_single(0,va_kmbuf,bufsize,DMA_FROM_DEVICE);
 		pa_kmbuf = pa;
-		dma_sync_single_for_cpu(0,pa_kmbuf,BUFSIZE,DMA_FROM_DEVICE);
-		//memset(va_kmbuf,0,BUFSIZE);
-		//va_kmbuf[10] = 11;
+		dma_sync_single_for_cpu(0,pa_kmbuf,bufsize,DMA_FROM_DEVICE);
 		printk("kernel va_kmbuf: 0x%p, pa_kmbuf 0x%08X\r\n",va_kmbuf,pa_kmbuf);
 		break;
 	case KMEM_TEST:
 		for(j=0;j<LOOPCNT;j++){
-			for(i=0;i<BUFSIZE;i++){
+			for(i=0;i<bufsize;i++){
 				s += va_kmbuf[i];
 			}
 		}
 		break;
 	case DMAMEM_REL:
-		dma_free_coherent(0,BUFSIZE,va_dmabuf,pa_dmabuf);
+		dma_free_coherent(0,bufsize,va_dmabuf,pa_dmabuf);
 		va_dmabuf = 0;
 		break;
 	case KMEM_REL:
 		kfree(va_kmbuf);
 		va_kmbuf = 0;
+		break;
+	case SYNC_KMEM:
+		dma_sync_single_for_cpu(NULL, pa_kmbuf,bufsize,DMA_FROM_DEVICE);
+		break;
+	case SET_MEM_SIZE:
+		//if(copy_from_user(&bufsize,arg,sizeof(bufsize))!=0){
+		//	printk("memalloc: error copying to userspace\r\n");
+		//	return -EFAULT;
+		//}
+		bufsize=arg;
+		break;
+	case USELESS:
+		//test speed of ioctl call itself
 		break;
 	default:
 		break;
